@@ -1,30 +1,30 @@
-# Usa la imagen base oficial de Maven con Java 17 para construir
-FROM maven:3.9.6-eclipse-temurin-17 AS builder
+# Usa una imagen base de Maven con Java 21 para construir el proyecto
+FROM maven:3.9.6-eclipse-temurin-21 AS builder
 
 # Establece el directorio de trabajo
 WORKDIR /app
 
-# Copia el pom.xml y decarga las dependencias
+# Copia los archivos del proyecto y descarga las dependencias
 COPY pom.xml .
 RUN mvn dependency:go-offline
 
-# Copia el codigo base de la aplicacion
+# Copia el código fuente
 COPY src ./src
 
-# Construye el empaquetado JAR omitiendo tests
+# Compila y empaqueta el microservicio (ignorando tests para mayor rapidez)
 RUN mvn clean package -DskipTests
 
-# Usa una imagen base de JRE ligera de Java 17 para distribucion
-FROM eclipse-temurin:17-jre-alpine
+# Usa una imagen ligera de Java 21 para ejecución
+FROM eclipse-temurin:21-jre-alpine
 
-# Establece el volumen/directorio de trabajo
+# Establece el directorio de trabajo del contenedor final
 WORKDIR /app
 
-# Copia el JAR de la etapa de construccion (builder) a la imagen final
-COPY --from=builder /app/target/bff-microservice-0.0.1-SNAPSHOT.jar app.jar
+# Copia el JAR generado desde la etapa de construcción
+COPY --from=builder /app/target/*.jar app.jar
 
-# Expone el puerto del microservicio (el default de spring boot)
+# Expone el puerto 8080 en el contenedor
 EXPOSE 8080
 
-# Comando para arrancar el contenedor
+# Comando para ejecutar la aplicación
 ENTRYPOINT ["java", "-jar", "app.jar"]

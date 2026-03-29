@@ -30,21 +30,15 @@ public class UsuariosFunction {
 
     @FunctionName("UsuariosFunction")
     public HttpResponseMessage run(
-            @HttpTrigger(
-                name = "req",
-                methods = {HttpMethod.GET, HttpMethod.POST},
-                authLevel = AuthorizationLevel.ANONYMOUS)
+            @HttpTrigger(name = "req", methods = {HttpMethod.GET, HttpMethod.POST}, authLevel = AuthorizationLevel.ANONYMOUS)
             HttpRequestMessage<Optional<String>> request,
             final ExecutionContext context) {
-
-        context.getLogger().info("Iniciando UsuariosFunction.");
 
         if (request.getHttpMethod() == HttpMethod.GET) {
             return getUsuarios(request, context);
         } else if (request.getHttpMethod() == HttpMethod.POST) {
             return createUsuario(request, context);
         }
-
         return request.createResponseBuilder(HttpStatus.BAD_REQUEST).build();
     }
 
@@ -53,7 +47,7 @@ public class UsuariosFunction {
         try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
              PreparedStatement stmt = conn.prepareStatement("SELECT id, nombre, email FROM usuarios");
              ResultSet rs = stmt.executeQuery()) {
-
+            
             while (rs.next()) {
                 Map<String, Object> usuario = new HashMap<>();
                 usuario.put("id", rs.getInt("id"));
@@ -63,16 +57,11 @@ public class UsuariosFunction {
             }
             return request.createResponseBuilder(HttpStatus.OK)
                     .header("Content-Type", "application/json")
-                    .body(gson.toJson(usuarios))
-                    .build();
+                    .body(gson.toJson(usuarios)).build();
         } catch (Exception e) {
-            context.getLogger().severe("Error al consultar usuarios: " + e.getMessage());
-            Map<String, String> error = new HashMap<>();
-            error.put("error", "Error interno al conectar con base de datos.");
             return request.createResponseBuilder(HttpStatus.INTERNAL_SERVER_ERROR)
                     .header("Content-Type", "application/json")
-                    .body(gson.toJson(error))
-                    .build();
+                    .body("{\"error\":\"Error de base de datos\"}").build();
         }
     }
 
@@ -85,26 +74,18 @@ public class UsuariosFunction {
 
             try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
                  PreparedStatement stmt = conn.prepareStatement("INSERT INTO usuarios (nombre, email) VALUES (?, ?)")) {
-                
                 stmt.setString(1, nombre);
                 stmt.setString(2, email);
                 stmt.executeUpdate();
-
-                Map<String, String> response = new HashMap<>();
-                response.put("message", "Usuario creado con éxito");
+                
                 return request.createResponseBuilder(HttpStatus.CREATED)
                         .header("Content-Type", "application/json")
-                        .body(gson.toJson(response))
-                        .build();
+                        .body("{\"message\":\"Usuario creado exitosamente\"}").build();
             }
         } catch (Exception e) {
-            context.getLogger().severe("Error al crear usuario: " + e.getMessage());
-            Map<String, String> error = new HashMap<>();
-            error.put("error", "Error en formato del JSON o base de datos.");
             return request.createResponseBuilder(HttpStatus.BAD_REQUEST)
                     .header("Content-Type", "application/json")
-                    .body(gson.toJson(error))
-                    .build();
+                    .body("{\"error\":\"Error procesando la solicitud\"}").build();
         }
     }
 }
