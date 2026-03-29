@@ -38,8 +38,6 @@ public class BffController {
         return restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
     }
 
-    // --- NUEVO: Endpoints de Prestamos ---
-
     @GetMapping(value = "/prestamos", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<String> getPrestamos() {
         String url = azureFunctionsBaseUrl + "/api/PrestamosFunction";

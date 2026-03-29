@@ -3,12 +3,10 @@
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
-
     <groupId>com.biblioteca</groupId>
     <artifactId>azure-functions</artifactId>
     <version>1.0-SNAPSHOT</version>
     <packaging>jar</packaging>
-
     <name>Azure Java Functions</name>
 
     <properties>
@@ -16,7 +14,7 @@
         <java.version>17</java.version>
         <azure.functions.maven.plugin.version>1.24.0</azure.functions.maven.plugin.version>
         <azure.functions.java.library.version>3.0.0</azure.functions.java.library.version>
-        <functionAppName>biblioteca-azure-functions</functionAppName>
+        <functionAppName>AppCloudNativeII</functionAppName>
     </properties>
 
     <dependencies>
@@ -25,13 +23,11 @@
             <artifactId>azure-functions-java-library</artifactId>
             <version>${azure.functions.java.library.version}</version>
         </dependency>
-        <!-- Conector JDBC para Oracle -->
         <dependency>
             <groupId>com.oracle.database.jdbc</groupId>
             <artifactId>ojdbc11</artifactId>
             <version>23.2.0.0</version>
         </dependency>
-        <!-- JSON parser (Gson para procesar las peticiones basicas) -->
         <dependency>
             <groupId>com.google.code.gson</groupId>
             <artifactId>gson</artifactId>
@@ -58,7 +54,7 @@
                 <configuration>
                     <appName>${functionAppName}</appName>
                     <resourceGroup>java-functions-group</resourceGroup>
-                    <appRegion>westus</appRegion>
+                    <appRegion>eastus2</appRegion>
                     <runtime>
                         <os>linux</os>
                         <javaVersion>17</javaVersion>
