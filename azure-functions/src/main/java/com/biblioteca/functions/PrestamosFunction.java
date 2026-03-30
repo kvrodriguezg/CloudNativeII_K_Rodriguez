@@ -30,54 +30,66 @@ public class PrestamosFunction {
 
     @FunctionName("PrestamosFunction")
     public HttpResponseMessage run(
-            @HttpTrigger(
-                name = "req",
-                methods = {HttpMethod.GET, HttpMethod.POST},
-                authLevel = AuthorizationLevel.ANONYMOUS)
+            @HttpTrigger(name = "req", methods = {HttpMethod.GET, HttpMethod.POST, HttpMethod.PUT, HttpMethod.DELETE}, authLevel = AuthorizationLevel.ANONYMOUS)
             HttpRequestMessage<Optional<String>> request,
             final ExecutionContext context) {
 
-        context.getLogger().info("Iniciando PrestamosFunction.");
-
         if (request.getHttpMethod() == HttpMethod.GET) {
-            return getPrestamos(request, context);
+            return getPrestamos(request);
         } else if (request.getHttpMethod() == HttpMethod.POST) {
-            return createPrestamo(request, context);
+            return createPrestamo(request);
+        } else if (request.getHttpMethod() == HttpMethod.PUT) {
+            return updatePrestamo(request);
+        } else if (request.getHttpMethod() == HttpMethod.DELETE) {
+            return deletePrestamo(request);
         }
-
         return request.createResponseBuilder(HttpStatus.BAD_REQUEST).build();
     }
 
-    private HttpResponseMessage getPrestamos(HttpRequestMessage<?> request, ExecutionContext context) {
+    private HttpResponseMessage getPrestamos(HttpRequestMessage<?> request) {
+        String idParam = request.getQueryParameters().get("id_prestamo");
         List<Map<String, Object>> prestamos = new ArrayList<>();
-        try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
-             PreparedStatement stmt = conn.prepareStatement("SELECT id, id_usuario, libro, fecha_prestamo FROM prestamos");
-             ResultSet rs = stmt.executeQuery()) {
-
-            while (rs.next()) {
-                Map<String, Object> prestamo = new HashMap<>();
-                prestamo.put("id", rs.getInt("id"));
-                prestamo.put("id_usuario", rs.getInt("id_usuario"));
-                prestamo.put("libro", rs.getString("libro"));
-                prestamo.put("fecha_prestamo", rs.getDate("fecha_prestamo") != null ? rs.getDate("fecha_prestamo").toString() : null);
-                prestamos.add(prestamo);
+        
+        try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD)) {
+            PreparedStatement stmt;
+            if (idParam != null && !idParam.isEmpty()) {
+                stmt = conn.prepareStatement("SELECT ID_PRESTAMO, ID_USUARIO, libro, fecha_prestamo FROM prestamos WHERE ID_PRESTAMO = ?");
+                stmt.setInt(1, Integer.parseInt(idParam));
+            } else {
+                stmt = conn.prepareStatement("SELECT ID_PRESTAMO, ID_USUARIO, libro, fecha_prestamo FROM prestamos");
             }
+            
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    Map<String, Object> prestamo = new HashMap<>();
+                    prestamo.put("id_prestamo", rs.getInt("ID_PRESTAMO"));
+                    prestamo.put("id_usuario", rs.getInt("ID_USUARIO"));
+                    prestamo.put("libro", rs.getString("libro"));
+                    prestamo.put("fecha_prestamo", rs.getDate("fecha_prestamo") != null ? rs.getDate("fecha_prestamo").toString() : null);
+                    prestamos.add(prestamo);
+                }
+            }
+            stmt.close();
+
+            if (idParam != null && !idParam.isEmpty() && prestamos.isEmpty()) {
+                return request.createResponseBuilder(HttpStatus.NOT_FOUND)
+                        .header("Content-Type", "application/json")
+                        .body("{\"error\":\"Not Found\"}").build();
+            }
+
             return request.createResponseBuilder(HttpStatus.OK)
                     .header("Content-Type", "application/json")
-                    .body(gson.toJson(prestamos))
-                    .build();
+                    .body(idParam != null && !idParam.isEmpty() && !prestamos.isEmpty() ? gson.toJson(prestamos.get(0)) : gson.toJson(prestamos)).build();
         } catch (Exception e) {
-            context.getLogger().severe("Error al consultar prestamos: " + e.getMessage());
-            Map<String, String> error = new HashMap<>();
-            error.put("error", "Error interno al conectar con base de datos.");
+            Map<String, String> err = new HashMap<>();
+            err.put("error", e.getMessage() != null ? e.getMessage() : e.toString());
             return request.createResponseBuilder(HttpStatus.INTERNAL_SERVER_ERROR)
                     .header("Content-Type", "application/json")
-                    .body(gson.toJson(error))
-                    .build();
+                    .body(gson.toJson(err)).build();
         }
     }
 
-    private HttpResponseMessage createPrestamo(HttpRequestMessage<Optional<String>> request, ExecutionContext context) {
+    private HttpResponseMessage createPrestamo(HttpRequestMessage<Optional<String>> request) {
         try {
             String body = request.getBody().orElse("");
             JsonObject jsonObject = gson.fromJson(body, JsonObject.class);
@@ -85,27 +97,97 @@ public class PrestamosFunction {
             String libro = jsonObject.get("libro").getAsString();
 
             try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
-                 PreparedStatement stmt = conn.prepareStatement("INSERT INTO prestamos (id_usuario, libro, fecha_prestamo) VALUES (?, ?, SYSDATE)")) {
-                
+                 PreparedStatement stmt = conn.prepareStatement("INSERT INTO prestamos (ID_USUARIO, libro, fecha_prestamo) VALUES (?, ?, SYSDATE)")) {
                 stmt.setInt(1, idUsuario);
                 stmt.setString(2, libro);
                 stmt.executeUpdate();
-
-                Map<String, String> response = new HashMap<>();
-                response.put("message", "Préstamo creado con éxito");
+                
                 return request.createResponseBuilder(HttpStatus.CREATED)
                         .header("Content-Type", "application/json")
-                        .body(gson.toJson(response))
-                        .build();
+                        .body("{\"message\":\"Created\"}").build();
             }
         } catch (Exception e) {
-            context.getLogger().severe("Error al crear prestamo: " + e.getMessage());
-            Map<String, String> error = new HashMap<>();
-            error.put("error", "Error en formato del JSON o base de datos.");
-            return request.createResponseBuilder(HttpStatus.BAD_REQUEST)
+            Map<String, String> err = new HashMap<>();
+            err.put("error", e.getMessage() != null ? e.getMessage() : e.toString());
+            return request.createResponseBuilder(HttpStatus.INTERNAL_SERVER_ERROR)
                     .header("Content-Type", "application/json")
-                    .body(gson.toJson(error))
-                    .build();
+                    .body(gson.toJson(err)).build();
+        }
+    }
+
+    private HttpResponseMessage updatePrestamo(HttpRequestMessage<Optional<String>> request) {
+        try {
+            String body = request.getBody().orElse("");
+            JsonObject jsonObject = gson.fromJson(body, JsonObject.class);
+            
+            String idParam = request.getQueryParameters().get("id_prestamo");
+            int idPrestamo;
+            if (idParam != null && !idParam.isEmpty()) {
+                idPrestamo = Integer.parseInt(idParam);
+            } else {
+                idPrestamo = jsonObject.get("id_prestamo").getAsInt();
+            }
+            
+            int idUsuario = jsonObject.get("id_usuario").getAsInt();
+            String libro = jsonObject.get("libro").getAsString();
+
+            try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
+                 PreparedStatement stmt = conn.prepareStatement("UPDATE prestamos SET ID_USUARIO = ?, libro = ? WHERE ID_PRESTAMO = ?")) {
+                stmt.setInt(1, idUsuario);
+                stmt.setString(2, libro);
+                stmt.setInt(3, idPrestamo);
+                int rows = stmt.executeUpdate();
+                
+                if (rows > 0) {
+                    return request.createResponseBuilder(HttpStatus.OK)
+                            .header("Content-Type", "application/json")
+                            .body("{\"message\":\"Updated\"}").build();
+                } else {
+                    return request.createResponseBuilder(HttpStatus.NOT_FOUND)
+                            .header("Content-Type", "application/json")
+                            .body("{\"error\":\"Not Found\"}").build();
+                }
+            }
+        } catch (Exception e) {
+            Map<String, String> err = new HashMap<>();
+            err.put("error", e.getMessage() != null ? e.getMessage() : e.toString());
+            return request.createResponseBuilder(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .header("Content-Type", "application/json")
+                    .body(gson.toJson(err)).build();
+        }
+    }
+
+    private HttpResponseMessage deletePrestamo(HttpRequestMessage<Optional<String>> request) {
+        try {
+            String idParam = request.getQueryParameters().get("id_prestamo");
+            if (idParam == null) {
+                String body = request.getBody().orElse("");
+                JsonObject jsonObject = gson.fromJson(body, JsonObject.class);
+                idParam = jsonObject.get("id_prestamo").getAsString();
+            }
+            int idPrestamo = Integer.parseInt(idParam);
+
+            try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
+                 PreparedStatement stmt = conn.prepareStatement("DELETE FROM prestamos WHERE ID_PRESTAMO = ?")) {
+                stmt.setInt(1, idPrestamo);
+                int rows = stmt.executeUpdate();
+                
+                if (rows > 0) {
+                    return request.createResponseBuilder(HttpStatus.OK)
+                            .header("Content-Type", "application/json")
+                            .body("{\"message\":\"Deleted\"}").build();
+                } else {
+                    return request.createResponseBuilder(HttpStatus.NOT_FOUND)
+                            .header("Content-Type", "application/json")
+                            .body("{\"error\":\"Not Found\"}").build();
+                }
+            }
+        } catch (Exception e) {
+            Map<String, String> err = new HashMap<>();
+            err.put("error", e.getMessage() != null ? e.getMessage() : e.toString());
+            return request.createResponseBuilder(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .header("Content-Type", "application/json")
+                    .body(gson.toJson(err)).build();
         }
     }
 }
