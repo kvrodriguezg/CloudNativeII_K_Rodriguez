@@ -8,7 +8,6 @@
     <version>1.0-SNAPSHOT</version>
     <packaging>jar</packaging>
     <name>Azure Java Functions</name>
-
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <java.version>17</java.version>
@@ -53,10 +52,11 @@
                 <version>${azure.functions.maven.plugin.version}</version>
                 <configuration>
                     <appName>${functionAppName}</appName>
-                    <resourceGroup>java-functions-group</resourceGroup>
+                    <resourceGroup>Grupo_Recursos_Cloud_Native_II</resourceGroup>
+                    <appServicePlanName>ASP-GrupoRecursosCloudNativeII-a9d7</appServicePlanName>
                     <appRegion>eastus2</appRegion>
                     <runtime>
-                        <os>linux</os>
+                        <os>windows</os>
                         <javaVersion>17</javaVersion>
                     </runtime>
                 </configuration>
@@ -71,4 +71,5 @@
             </plugin>
         </plugins>
     </build>
+    
 </project>
