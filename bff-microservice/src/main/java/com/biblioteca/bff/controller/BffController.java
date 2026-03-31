@@ -8,6 +8,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestTemplate;
+import java.util.Collections;
 
 @RestController
 @RequestMapping("/api/bff")
@@ -22,6 +23,7 @@ public class BffController {
         this.restTemplate = restTemplate;
     }
 
+    //USUARIOS
     @GetMapping(value = "/usuarios", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<String> getUsuarios() {
         String url = azureFunctionsBaseUrl + "/api/UsuariosFunction";
@@ -37,26 +39,22 @@ public class BffController {
     @PostMapping(value = "/usuarios", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<String> createUsuario(@RequestBody String requestBody) {
         String url = azureFunctionsBaseUrl + "/api/UsuariosFunction";
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-        HttpEntity<String> entity = new HttpEntity<>(requestBody, headers);
-        return restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
+        return ejecutarPeticion(url, HttpMethod.POST, requestBody);
     }
 
     @PutMapping(value = "/usuarios/{idUsuario}", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<String> updateUsuario(@PathVariable String idUsuario, @RequestBody String requestBody) {
         String url = azureFunctionsBaseUrl + "/api/UsuariosFunction?id_usuario=" + idUsuario;
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-        HttpEntity<String> entity = new HttpEntity<>(requestBody, headers);
-        return restTemplate.exchange(url, HttpMethod.PUT, entity, String.class);
+        return ejecutarPeticion(url, HttpMethod.PUT, requestBody);
     }
 
     @DeleteMapping(value = "/usuarios/{idUsuario}", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<String> deleteUsuario(@PathVariable String idUsuario) {
         String url = azureFunctionsBaseUrl + "/api/UsuariosFunction?id_usuario=" + idUsuario;
-        return restTemplate.exchange(url, HttpMethod.DELETE, null, String.class);
+        return ejecutarPeticion(url, HttpMethod.DELETE, null);
     }
+
+    //PRESTAMOS
 
     @GetMapping(value = "/prestamos", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<String> getPrestamos() {
@@ -73,24 +71,27 @@ public class BffController {
     @PostMapping(value = "/prestamos", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<String> createPrestamo(@RequestBody String requestBody) {
         String url = azureFunctionsBaseUrl + "/api/PrestamosFunction";
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-        HttpEntity<String> entity = new HttpEntity<>(requestBody, headers);
-        return restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
+        return ejecutarPeticion(url, HttpMethod.POST, requestBody);
     }
 
     @PutMapping(value = "/prestamos/{idPrestamo}", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<String> updatePrestamo(@PathVariable String idPrestamo, @RequestBody String requestBody) {
         String url = azureFunctionsBaseUrl + "/api/PrestamosFunction?id_prestamo=" + idPrestamo;
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_JSON);
-        HttpEntity<String> entity = new HttpEntity<>(requestBody, headers);
-        return restTemplate.exchange(url, HttpMethod.PUT, entity, String.class);
+        return ejecutarPeticion(url, HttpMethod.PUT, requestBody);
     }
 
     @DeleteMapping(value = "/prestamos/{idPrestamo}", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<String> deletePrestamo(@PathVariable String idPrestamo) {
         String url = azureFunctionsBaseUrl + "/api/PrestamosFunction?id_prestamo=" + idPrestamo;
-        return restTemplate.exchange(url, HttpMethod.DELETE, null, String.class);
+        return ejecutarPeticion(url, HttpMethod.DELETE, null);
+    }
+
+    private ResponseEntity<String> ejecutarPeticion(String url, HttpMethod metodo, String body) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setAccept(Collections.singletonList(MediaType.APPLICATION_JSON));
+        
+        HttpEntity<String> entity = new HttpEntity<>(body, headers);
+        return restTemplate.exchange(url, metodo, entity, String.class);
     }
 }
