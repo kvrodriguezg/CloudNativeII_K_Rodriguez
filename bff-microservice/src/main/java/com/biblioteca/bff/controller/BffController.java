@@ -86,6 +86,20 @@ public class BffController {
         return ejecutarPeticion(url, HttpMethod.DELETE, null);
     }
 
+    // GRAPHQL
+
+    @PostMapping(value = "/graphql/usuarios", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<String> executeGraphQLUsuarios(@RequestBody String requestBody) {
+        String url = azureFunctionsBaseUrl + "/api/UsuariosGraphQLFunction";
+        return ejecutarPeticion(url, HttpMethod.POST, requestBody);
+    }
+
+    @PostMapping(value = "/graphql/prestamos", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<String> executeGraphQLPrestamos(@RequestBody String requestBody) {
+        String url = azureFunctionsBaseUrl + "/api/PrestamosGraphQLFunction";
+        return ejecutarPeticion(url, HttpMethod.POST, requestBody);
+    }
+
     private ResponseEntity<String> ejecutarPeticion(String url, HttpMethod metodo, String body) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
