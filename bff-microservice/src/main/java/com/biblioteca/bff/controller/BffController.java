@@ -86,7 +86,7 @@ public class BffController {
         return ejecutarPeticion(url, HttpMethod.DELETE, null);
     }
 
-    // GRAPHQL
+    //GRAPHQL
 
     @PostMapping(value = "/graphql/usuarios", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<String> executeGraphQLUsuarios(@RequestBody String requestBody) {

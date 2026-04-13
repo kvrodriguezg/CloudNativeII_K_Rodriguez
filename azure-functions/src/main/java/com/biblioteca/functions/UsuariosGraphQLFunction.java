@@ -41,12 +41,22 @@ public class UsuariosGraphQLFunction {
     private static GraphQL buildGraphQL() {
         String schema = "type Query {" +
                         "  usuario(id_usuario: Int): Usuario " +
-                        "  usuarios: [Usuario]" +
+                        "  usuarios: [Usuario] " +
+                        "  prestamo(id_prestamo: Int): Prestamo " +
+                        "  prestamos: [Prestamo] " +
                         "} " +
                         "type Usuario {" +
                         "  id_usuario: Int " +
                         "  nombre: String " +
                         "  email: String " +
+                        "  prestamos: [Prestamo] " +
+                        "} " +
+                        "type Prestamo {" +
+                        "  id_prestamo: Int " +
+                        "  id_usuario: Int " +
+                        "  libro: String " +
+                        "  fecha_prestamo: String " +
+                        "  usuario: Usuario " +
                         "}";
         
         SchemaParser schemaParser = new SchemaParser();
@@ -67,15 +77,31 @@ public class UsuariosGraphQLFunction {
         return dataFetchingEnvironment -> {
             Integer id = dataFetchingEnvironment.getArgument("id_usuario");
             if(id == null) return null;
-            try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
-                 PreparedStatement stmt = conn.prepareStatement("SELECT ID_USUARIO, nombre, email FROM usuarios WHERE ID_USUARIO = ?")) {
+            try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD)) {
+                String sqlUser = "SELECT ID_USUARIO, nombre, email FROM usuarios WHERE ID_USUARIO = ?";
+                PreparedStatement stmt = conn.prepareStatement(sqlUser);
                 stmt.setInt(1, id);
                 try(ResultSet rs = stmt.executeQuery()) {
                     if (rs.next()) {
                         Map<String, Object> usuario = new HashMap<>();
-                        usuario.put("id_usuario", rs.getInt("ID_USUARIO"));
+                        int idU = rs.getInt("ID_USUARIO");
+                        usuario.put("id_usuario", idU);
                         usuario.put("nombre", rs.getString("nombre"));
                         usuario.put("email", rs.getString("email"));
+                        
+                        List<Map<String, Object>> prestamosUser = new ArrayList<>();
+                        String sqlP = "SELECT ID_PRESTAMO, libro, fecha_prestamo FROM prestamos WHERE ID_USUARIO = ?";
+                        PreparedStatement stmtP = conn.prepareStatement(sqlP);
+                        stmtP.setInt(1, idU);
+                        ResultSet rsP = stmtP.executeQuery();
+                        while(rsP.next()){
+                            Map<String, Object> p = new HashMap<>();
+                            p.put("id_prestamo", rsP.getInt("ID_PRESTAMO"));
+                            p.put("libro", rsP.getString("libro"));
+                            p.put("fecha_prestamo", rsP.getString("fecha_prestamo"));
+                            prestamosUser.add(p);
+                        }
+                        usuario.put("prestamos", prestamosUser);
                         return usuario;
                     }
                 }
@@ -89,19 +115,36 @@ public class UsuariosGraphQLFunction {
     private static DataFetcher<List<Map<String, Object>>> getUsuariosDataFetcher() {
         return dataFetchingEnvironment -> {
             List<Map<String, Object>> usuarios = new ArrayList<>();
-            try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
-                 PreparedStatement stmt = conn.prepareStatement("SELECT ID_USUARIO, nombre, email FROM usuarios");
-                 ResultSet rs = stmt.executeQuery()) {
-                while (rs.next()) {
+            try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD)) {
+                //Buscar usuarios
+                String sqlUsers = "SELECT ID_USUARIO, nombre, email FROM usuarios";
+                PreparedStatement stmtUser = conn.prepareStatement(sqlUsers);
+                ResultSet rsUser = stmtUser.executeQuery();
+                
+                while (rsUser.next()) {
                     Map<String, Object> usuario = new HashMap<>();
-                    usuario.put("id_usuario", rs.getInt("ID_USUARIO"));
-                    usuario.put("nombre", rs.getString("nombre"));
-                    usuario.put("email", rs.getString("email"));
+                    int idU = rsUser.getInt("ID_USUARIO");
+                    usuario.put("id_usuario", idU);
+                    usuario.put("nombre", rsUser.getString("nombre"));
+                    usuario.put("email", rsUser.getString("email"));
+
+                    //Por cada usuario buscar sus préstamos
+                    List<Map<String, Object>> prestamosUser = new ArrayList<>();
+                    String sqlPrestamos = "SELECT ID_PRESTAMO, libro, fecha_prestamo FROM prestamos WHERE ID_USUARIO = ?";
+                    PreparedStatement stmtP = conn.prepareStatement(sqlPrestamos);
+                    stmtP.setInt(1, idU);
+                    ResultSet rsP = stmtP.executeQuery();
+                    while(rsP.next()){
+                        Map<String, Object> p = new HashMap<>();
+                        p.put("id_prestamo", rsP.getInt("ID_PRESTAMO"));
+                        p.put("libro", rsP.getString("libro"));
+                        p.put("fecha_prestamo", rsP.getString("fecha_prestamo"));
+                        prestamosUser.add(p);
+                    }
+                    usuario.put("prestamos", prestamosUser);
                     usuarios.add(usuario);
                 }
-            } catch(Exception e) {
-                 e.printStackTrace();
-            }
+            } catch (Exception e) { e.printStackTrace(); }
             return usuarios;
         };
     }
