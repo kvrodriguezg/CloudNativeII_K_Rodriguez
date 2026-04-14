@@ -90,7 +90,7 @@ public class PrestamosGraphQLFunction {
                         prestamo.put("fecha_prestamo",
                                 rs.getDate("fecha_prestamo") != null ? rs.getDate("fecha_prestamo").toString() : null);
 
-                        // Crear objeto usuario
+                        //Crear objeto usuario
                         Map<String, Object> user = new HashMap<>();
                         user.put("id_usuario", rs.getInt("ID_USUARIO"));
                         user.put("nombre", rs.getString("nombre"));
@@ -110,7 +110,7 @@ public class PrestamosGraphQLFunction {
     private static DataFetcher<List<Map<String, Object>>> getPrestamosDataFetcher() {
         return dataFetchingEnvironment -> {
             List<Map<String, Object>> prestamos = new ArrayList<>();
-            // Cruce con usuarios
+            //Cruce con usuarios
             String sql = "SELECT p.*, u.nombre, u.email FROM prestamos p " +
                     "INNER JOIN usuarios u ON p.ID_USUARIO = u.ID_USUARIO";
             try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
@@ -123,7 +123,7 @@ public class PrestamosGraphQLFunction {
                     p.put("fecha_prestamo",
                             rs.getDate("fecha_prestamo") != null ? rs.getDate("fecha_prestamo").toString() : null);
 
-                    // Crear objeto usdario anidado
+                    //Crear objeto usdario anidado
                     Map<String, Object> user = new HashMap<>();
                     user.put("id_usuario", rs.getInt("ID_USUARIO"));
                     user.put("nombre", rs.getString("nombre"));

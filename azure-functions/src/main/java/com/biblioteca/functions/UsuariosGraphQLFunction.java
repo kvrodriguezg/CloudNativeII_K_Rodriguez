@@ -60,24 +60,35 @@ public class UsuariosGraphQLFunction {
                         "}";
         
         SchemaParser schemaParser = new SchemaParser();
+
+        //Crear objeto TypeDefinitionRegistry
         TypeDefinitionRegistry typeDefinitionRegistry = schemaParser.parse(schema);
         
+        //Crear objeto RuntimeWiring, cuando alguien pida usuario(s) ejecutar la función que le corresponde
         RuntimeWiring runtimeWiring = RuntimeWiring.newRuntimeWiring()
                 .type("Query", builder -> builder.dataFetcher("usuario", getUsuarioDataFetcher())
                                                  .dataFetcher("usuarios", getUsuariosDataFetcher()))
                 .build();
                 
         SchemaGenerator schemaGenerator = new SchemaGenerator();
+
+        //Crear objeto GraphQL
+        //Se une el esquema y el wiring
         GraphQLSchema graphQLSchema = schemaGenerator.makeExecutableSchema(typeDefinitionRegistry, runtimeWiring);
         
         return GraphQL.newGraphQL(graphQLSchema).build();
     }
     
+    //Función datafetcher que obtiene un usuario por id
     private static DataFetcher<Map<String, Object>> getUsuarioDataFetcher() {
         return dataFetchingEnvironment -> {
             Integer id = dataFetchingEnvironment.getArgument("id_usuario");
             if(id == null) return null;
+
+            //Conexión a la base de datos
             try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD)) {
+                
+                //Consulta principal
                 String sqlUser = "SELECT ID_USUARIO, nombre, email FROM usuarios WHERE ID_USUARIO = ?";
                 PreparedStatement stmt = conn.prepareStatement(sqlUser);
                 stmt.setInt(1, id);
@@ -89,6 +100,7 @@ public class UsuariosGraphQLFunction {
                         usuario.put("nombre", rs.getString("nombre"));
                         usuario.put("email", rs.getString("email"));
                         
+                        //Obtener los préstamos del usuario
                         List<Map<String, Object>> prestamosUser = new ArrayList<>();
                         String sqlP = "SELECT ID_PRESTAMO, libro, fecha_prestamo FROM prestamos WHERE ID_USUARIO = ?";
                         PreparedStatement stmtP = conn.prepareStatement(sqlP);
@@ -152,12 +164,16 @@ public class UsuariosGraphQLFunction {
     private static final GraphQL graphQL = buildGraphQL();
 
     @FunctionName("UsuariosGraphQLFunction")
+    //Punto de entrada
     public HttpResponseMessage run(
+            //Responde al post
             @HttpTrigger(name = "req", methods = {HttpMethod.POST}, authLevel = AuthorizationLevel.ANONYMOUS)
             HttpRequestMessage<Optional<String>> request,
             final ExecutionContext context) {
 
         try {
+
+            //Toma el request y extrae el query
             String body = request.getBody().orElse("");
             JsonObject jsonObject = gson.fromJson(body, JsonObject.class);
             String query = jsonObject.get("query").getAsString();
@@ -167,11 +183,13 @@ public class UsuariosGraphQLFunction {
                 variables = gson.fromJson(jsonObject.get("variables"), Map.class);
             }
             
+            
             ExecutionInput executionInput = ExecutionInput.newExecutionInput()
                     .query(query)
                     .variables(variables)
                     .build();
-                    
+            
+            //Ejecuta el query
             ExecutionResult executionResult = graphQL.execute(executionInput);
             
             return request.createResponseBuilder(HttpStatus.OK)
@@ -180,6 +198,7 @@ public class UsuariosGraphQLFunction {
                     .build();
                     
         } catch (Exception e) {
+            //En caso de error
             Map<String, String> err = new HashMap<>();
             err.put("error", e.getMessage() != null ? e.getMessage() : e.toString());
             return request.createResponseBuilder(HttpStatus.INTERNAL_SERVER_ERROR)
