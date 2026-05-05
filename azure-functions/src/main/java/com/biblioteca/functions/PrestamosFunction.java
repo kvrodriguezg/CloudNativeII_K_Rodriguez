@@ -11,6 +11,12 @@ import com.microsoft.azure.functions.annotation.AuthorizationLevel;
 import com.microsoft.azure.functions.annotation.FunctionName;
 import com.microsoft.azure.functions.annotation.HttpTrigger;
 
+import com.azure.core.credential.AzureKeyCredential;
+import com.azure.core.util.BinaryData;
+import com.azure.messaging.eventgrid.EventGridEvent;
+import com.azure.messaging.eventgrid.EventGridPublisherClient;
+import com.azure.messaging.eventgrid.EventGridPublisherClientBuilder;
+
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -37,7 +43,7 @@ public class PrestamosFunction {
         if (request.getHttpMethod() == HttpMethod.GET) {
             return getPrestamos(request);
         } else if (request.getHttpMethod() == HttpMethod.POST) {
-            return createPrestamo(request);
+            return createPrestamo(request, context);
         } else if (request.getHttpMethod() == HttpMethod.PUT) {
             return updatePrestamo(request);
         } else if (request.getHttpMethod() == HttpMethod.DELETE) {
@@ -89,7 +95,7 @@ public class PrestamosFunction {
         }
     }
 
-    private HttpResponseMessage createPrestamo(HttpRequestMessage<Optional<String>> request) {
+    private HttpResponseMessage createPrestamo(HttpRequestMessage<Optional<String>> request, ExecutionContext context) {
         try {
             String body = request.getBody().orElse("");
             JsonObject jsonObject = gson.fromJson(body, JsonObject.class);
@@ -102,6 +108,41 @@ public class PrestamosFunction {
                 stmt.setString(2, libro);
                 stmt.executeUpdate();
                 
+                //Publicar evento en Azure Event Grid
+                try {
+                    String eventGridEndpoint = System.getenv("EVENT_GRID_ENDPOINT");
+                    String eventGridKey = System.getenv("EVENT_GRID_KEY");
+                    
+                    if (eventGridEndpoint != null && eventGridKey != null && !eventGridEndpoint.isEmpty()) {
+                        EventGridPublisherClient<EventGridEvent> client = new EventGridPublisherClientBuilder()
+                            .endpoint(eventGridEndpoint)
+                            .credential(new AzureKeyCredential(eventGridKey))
+                            .buildEventGridEventPublisherClient();
+
+                        //Paquete de datos
+                        Map<String, String> eventData = new HashMap<>();
+                        eventData.put("mensaje", "Se ha creado un préstamo exitosamente");
+                        eventData.put("id_usuario", String.valueOf(idUsuario));
+                        eventData.put("libro", libro);
+
+                        EventGridEvent event = new EventGridEvent(
+                            "Prestamo.Creado",
+                            "Biblioteca.Prestamos",
+                            BinaryData.fromObject(eventData),
+                            "1.0"
+                        );
+
+                        //Se envía el evento a Event Grid
+                        client.sendEvent(event);
+                        context.getLogger().info("Evento publicado en Event Grid exitosamente para el usuario: " + idUsuario);
+                    } else {
+                        context.getLogger().warning("No se encontraron las credenciales de Event Grid en las variables de entorno.");
+                    }
+                } catch (Exception ex) {
+                    context.getLogger().warning("Error al publicar evento en Event Grid: " + ex.getMessage());
+                }
+                
+                //Respuesta de éxito
                 return request.createResponseBuilder(HttpStatus.CREATED)
                         .header("Content-Type", "application/json")
                         .body("{\"message\":\"Created\"}").build();
