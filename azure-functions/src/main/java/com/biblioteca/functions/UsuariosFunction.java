@@ -26,13 +26,30 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class UsuariosFunction {
+
+    private static final Logger LOGGER = Logger.getLogger(UsuariosFunction.class.getName());
 
     private static final String DB_URL = System.getenv("ORACLE_DB_URL");
     private static final String DB_USER = System.getenv("ORACLE_DB_USER");
     private static final String DB_PASSWORD = System.getenv("ORACLE_DB_PASSWORD");
     private static final Gson gson = new Gson();
+
+    // Constantes de campo/clave
+    private static final String FIELD_ID_USUARIO = "id_usuario";
+    private static final String FIELD_NOMBRE = "nombre";
+    private static final String FIELD_EMAIL = "email";
+    private static final String FIELD_ERROR = "error";
+
+    // Constantes de encabezado/valor HTTP
+    private static final String HEADER_CONTENT_TYPE = "Content-Type";
+    private static final String MIME_JSON = "application/json";
+
+    // Constantes de columna DB
+    private static final String COL_ID_USUARIO = "ID_USUARIO";
 
     @FunctionName("UsuariosFunction")
     public HttpResponseMessage run(
@@ -53,46 +70,45 @@ public class UsuariosFunction {
     }
 
     private HttpResponseMessage getUsuarios(HttpRequestMessage<?> request) {
-        String idParam = request.getQueryParameters().get("id_usuario");
+        String idParam = request.getQueryParameters().get(FIELD_ID_USUARIO);
+        boolean hasId = idParam != null && !idParam.isEmpty();
         List<Map<String, Object>> usuarios = new ArrayList<>();
 
-        try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD)) {
-            PreparedStatement stmt;
-            if (idParam != null && !idParam.isEmpty()) {
-                stmt = conn.prepareStatement("SELECT ID_USUARIO, nombre, email FROM usuarios WHERE ID_USUARIO = ?");
+        String sql = hasId
+                ? "SELECT ID_USUARIO, nombre, email FROM usuarios WHERE ID_USUARIO = ?"
+                : "SELECT ID_USUARIO, nombre, email FROM usuarios";
+
+        try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
+                PreparedStatement stmt = conn.prepareStatement(sql)) {
+
+            if (hasId) {
                 stmt.setInt(1, Integer.parseInt(idParam));
-            } else {
-                stmt = conn.prepareStatement("SELECT ID_USUARIO, nombre, email FROM usuarios");
             }
 
             try (ResultSet rs = stmt.executeQuery()) {
                 while (rs.next()) {
                     Map<String, Object> usuario = new HashMap<>();
-                    usuario.put("id_usuario", rs.getInt("ID_USUARIO"));
-                    usuario.put("nombre", rs.getString("nombre"));
-                    usuario.put("email", rs.getString("email"));
+                    usuario.put(FIELD_ID_USUARIO, rs.getInt(COL_ID_USUARIO));
+                    usuario.put(FIELD_NOMBRE, rs.getString(FIELD_NOMBRE));
+                    usuario.put(FIELD_EMAIL, rs.getString(FIELD_EMAIL));
                     usuarios.add(usuario);
                 }
             }
-            stmt.close();
 
-            if (idParam != null && !idParam.isEmpty() && usuarios.isEmpty()) {
+            if (hasId && usuarios.isEmpty()) {
                 return request.createResponseBuilder(HttpStatus.NOT_FOUND)
-                        .header("Content-Type", "application/json")
+                        .header(HEADER_CONTENT_TYPE, MIME_JSON)
                         .body("{\"error\":\"Not Found\"}").build();
             }
 
             return request.createResponseBuilder(HttpStatus.OK)
-                    .header("Content-Type", "application/json")
-                    .body(idParam != null && !idParam.isEmpty() && !usuarios.isEmpty() ? gson.toJson(usuarios.get(0))
+                    .header(HEADER_CONTENT_TYPE, MIME_JSON)
+                    .body(hasId && !usuarios.isEmpty()
+                            ? gson.toJson(usuarios.get(0))
                             : gson.toJson(usuarios))
                     .build();
         } catch (Exception e) {
-            Map<String, String> err = new HashMap<>();
-            err.put("error", e.getMessage() != null ? e.getMessage() : e.toString());
-            return request.createResponseBuilder(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .header("Content-Type", "application/json")
-                    .body(gson.toJson(err)).build();
+            return buildErrorResponse(request, e);
         }
     }
 
@@ -100,26 +116,22 @@ public class UsuariosFunction {
         try {
             String body = request.getBody().orElse("");
             JsonObject jsonObject = gson.fromJson(body, JsonObject.class);
-            String nombre = jsonObject.get("nombre").getAsString();
-            String email = jsonObject.get("email").getAsString();
+            String nombre = jsonObject.get(FIELD_NOMBRE).getAsString();
+            String email = jsonObject.get(FIELD_EMAIL).getAsString();
 
             try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
-                    PreparedStatement stmt = conn
-                            .prepareStatement("INSERT INTO usuarios (nombre, email) VALUES (?, ?)")) {
+                    PreparedStatement stmt = conn.prepareStatement(
+                            "INSERT INTO usuarios (nombre, email) VALUES (?, ?)")) {
                 stmt.setString(1, nombre);
                 stmt.setString(2, email);
                 stmt.executeUpdate();
 
                 return request.createResponseBuilder(HttpStatus.CREATED)
-                        .header("Content-Type", "application/json")
+                        .header(HEADER_CONTENT_TYPE, MIME_JSON)
                         .body("{\"message\":\"Created\"}").build();
             }
         } catch (Exception e) {
-            Map<String, String> err = new HashMap<>();
-            err.put("error", e.getMessage() != null ? e.getMessage() : e.toString());
-            return request.createResponseBuilder(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .header("Content-Type", "application/json")
-                    .body(gson.toJson(err)).build();
+            return buildErrorResponse(request, e);
         }
     }
 
@@ -128,20 +140,20 @@ public class UsuariosFunction {
             String body = request.getBody().orElse("");
             JsonObject jsonObject = gson.fromJson(body, JsonObject.class);
 
-            String idParam = request.getQueryParameters().get("id_usuario");
+            String idParam = request.getQueryParameters().get(FIELD_ID_USUARIO);
             int idUsuario;
             if (idParam != null && !idParam.isEmpty()) {
                 idUsuario = Integer.parseInt(idParam);
             } else {
-                idUsuario = jsonObject.get("id_usuario").getAsInt();
+                idUsuario = jsonObject.get(FIELD_ID_USUARIO).getAsInt();
             }
 
-            String nombre = jsonObject.get("nombre").getAsString();
-            String email = jsonObject.get("email").getAsString();
+            String nombre = jsonObject.get(FIELD_NOMBRE).getAsString();
+            String email = jsonObject.get(FIELD_EMAIL).getAsString();
 
             try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
-                    PreparedStatement stmt = conn
-                            .prepareStatement("UPDATE usuarios SET nombre = ?, email = ? WHERE ID_USUARIO = ?")) {
+                    PreparedStatement stmt = conn.prepareStatement(
+                            "UPDATE usuarios SET nombre = ?, email = ? WHERE ID_USUARIO = ?")) {
                 stmt.setString(1, nombre);
                 stmt.setString(2, email);
                 stmt.setInt(3, idUsuario);
@@ -149,31 +161,27 @@ public class UsuariosFunction {
 
                 if (rows > 0) {
                     return request.createResponseBuilder(HttpStatus.OK)
-                            .header("Content-Type", "application/json")
+                            .header(HEADER_CONTENT_TYPE, MIME_JSON)
                             .body("{\"message\":\"Updated\"}").build();
                 } else {
                     return request.createResponseBuilder(HttpStatus.NOT_FOUND)
-                            .header("Content-Type", "application/json")
+                            .header(HEADER_CONTENT_TYPE, MIME_JSON)
                             .body("{\"error\":\"Not Found\"}").build();
                 }
             }
         } catch (Exception e) {
-            Map<String, String> err = new HashMap<>();
-            err.put("error", e.getMessage() != null ? e.getMessage() : e.toString());
-            return request.createResponseBuilder(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .header("Content-Type", "application/json")
-                    .body(gson.toJson(err)).build();
+            return buildErrorResponse(request, e);
         }
     }
 
     private HttpResponseMessage deleteUsuario(
             HttpRequestMessage<Optional<String>> request, ExecutionContext context) {
         try {
-            String idParam = request.getQueryParameters().get("id_usuario");
+            String idParam = request.getQueryParameters().get(FIELD_ID_USUARIO);
             if (idParam == null || idParam.isEmpty()) {
                 String body = request.getBody().orElse("");
                 JsonObject jsonObject = gson.fromJson(body, JsonObject.class);
-                idParam = jsonObject.get("id_usuario").getAsString();
+                idParam = jsonObject.get(FIELD_ID_USUARIO).getAsString();
             }
             int idUsuario = Integer.parseInt(idParam);
 
@@ -183,11 +191,10 @@ public class UsuariosFunction {
 
             if (eventGridEndpoint == null || eventGridEndpoint.isEmpty()
                     || eventGridKey == null || eventGridKey.isEmpty()) {
-                context.getLogger().severe(
-                        "Variables EVENT_GRID_ENDPOINT / EVENT_GRID_KEY no configuradas. " +
-                                "No se puede publicar el evento 'Usuario.Eliminado'.");
+                LOGGER.severe("Variables EVENT_GRID_ENDPOINT / EVENT_GRID_KEY no configuradas. "
+                        + "No se puede publicar el evento 'Usuario.Eliminado'.");
                 return request.createResponseBuilder(HttpStatus.INTERNAL_SERVER_ERROR)
-                        .header("Content-Type", "application/json")
+                        .header(HEADER_CONTENT_TYPE, MIME_JSON)
                         .body("{\"error\":\"Event Grid no configurado. Eliminación cancelada.\"}").build();
             }
 
@@ -206,22 +213,27 @@ public class UsuariosFunction {
                     "1.0");
 
             client.sendEvent(event);
-            context.getLogger().info(
-                    "Evento 'Usuario.Eliminado' publicado para id_usuario: " + idUsuario);
+            context.getLogger().log(Level.INFO,
+                    "Evento ''Usuario.Eliminado'' publicado para id_usuario: {0}", idUsuario);
 
             // Eliminación real ocurrirá de forma asíncrona
             return request.createResponseBuilder(HttpStatus.ACCEPTED)
-                    .header("Content-Type", "application/json")
-                    .body("{\"message\":\"Solicitud de eliminación aceptada. " +
-                            "El usuario y sus préstamos serán eliminados de forma asíncrona.\"}")
+                    .header(HEADER_CONTENT_TYPE, MIME_JSON)
+                    .body("{\"message\":\"Solicitud de eliminación aceptada. "
+                            + "El usuario y sus préstamos serán eliminados de forma asíncrona.\"}")
                     .build();
 
         } catch (Exception e) {
-            Map<String, String> err = new HashMap<>();
-            err.put("error", e.getMessage() != null ? e.getMessage() : e.toString());
-            return request.createResponseBuilder(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .header("Content-Type", "application/json")
-                    .body(gson.toJson(err)).build();
+            return buildErrorResponse(request, e);
         }
+    }
+
+    private HttpResponseMessage buildErrorResponse(HttpRequestMessage<?> request, Exception e) {
+        LOGGER.log(Level.SEVERE, "Error en UsuariosFunction", e);
+        Map<String, String> err = new HashMap<>();
+        err.put(FIELD_ERROR, e.getMessage() != null ? e.getMessage() : e.toString());
+        return request.createResponseBuilder(HttpStatus.INTERNAL_SERVER_ERROR)
+                .header(HEADER_CONTENT_TYPE, MIME_JSON)
+                .body(gson.toJson(err)).build();
     }
 }
