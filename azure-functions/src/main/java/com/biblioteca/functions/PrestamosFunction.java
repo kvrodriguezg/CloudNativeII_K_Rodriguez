@@ -100,52 +100,57 @@ public class PrestamosFunction {
             String body = request.getBody().orElse("");
             JsonObject jsonObject = gson.fromJson(body, JsonObject.class);
             int idUsuario = jsonObject.get("id_usuario").getAsInt();
-            String libro = jsonObject.get("libro").getAsString();
+            // El campo "libro" del body contiene el TÍTULO del libro, que es la FK hacia la tabla libros
+            String tituloLibro = jsonObject.get("libro").getAsString();
 
             try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
-                 PreparedStatement stmt = conn.prepareStatement("INSERT INTO prestamos (ID_USUARIO, libro, fecha_prestamo) VALUES (?, ?, SYSDATE)")) {
+                 PreparedStatement stmt = conn.prepareStatement(
+                         "INSERT INTO prestamos (ID_USUARIO, libro, fecha_prestamo) VALUES (?, ?, SYSDATE)")) {
                 stmt.setInt(1, idUsuario);
-                stmt.setString(2, libro);
+                stmt.setString(2, tituloLibro);
                 stmt.executeUpdate();
-                
-                //Publicar evento en Azure Event Grid
+
+                //Evento "Prestamo.Creado"
                 try {
                     String eventGridEndpoint = System.getenv("EVENT_GRID_ENDPOINT");
-                    String eventGridKey = System.getenv("EVENT_GRID_KEY");
-                    
-                    if (eventGridEndpoint != null && eventGridKey != null && !eventGridEndpoint.isEmpty()) {
-                        EventGridPublisherClient<EventGridEvent> client = new EventGridPublisherClientBuilder()
-                            .endpoint(eventGridEndpoint)
-                            .credential(new AzureKeyCredential(eventGridKey))
-                            .buildEventGridEventPublisherClient();
+                    String eventGridKey      = System.getenv("EVENT_GRID_KEY");
 
-                        //Paquete de datos
-                        Map<String, String> eventData = new HashMap<>();
-                        eventData.put("mensaje", "Se ha creado un préstamo exitosamente");
-                        eventData.put("id_usuario", String.valueOf(idUsuario));
-                        eventData.put("libro", libro);
+                    if (eventGridEndpoint != null && !eventGridEndpoint.isEmpty()
+                            && eventGridKey != null && !eventGridKey.isEmpty()) {
+
+                        EventGridPublisherClient<EventGridEvent> client =
+                            new EventGridPublisherClientBuilder()
+                                .endpoint(eventGridEndpoint)
+                                .credential(new AzureKeyCredential(eventGridKey))
+                                .buildEventGridEventPublisherClient();
+
+                        // Payload tipado: tituloLibro permite al consumidor hacer el UPDATE por título
+                        PrestamoEventData eventData = new PrestamoEventData(tituloLibro, idUsuario);
 
                         EventGridEvent event = new EventGridEvent(
-                            "Prestamo.Creado",
-                            "Biblioteca.Prestamos",
-                            BinaryData.fromObject(eventData),
-                            "1.0"
+                            "/biblioteca/prestamos",          // subject
+                            "Prestamo.Creado",                // eventType
+                            BinaryData.fromObject(eventData), // data
+                            "1.0"                             // dataVersion
                         );
 
-                        //Se envía el evento a Event Grid
                         client.sendEvent(event);
-                        context.getLogger().info("Evento publicado en Event Grid exitosamente para el usuario: " + idUsuario);
+                        context.getLogger().info(
+                            "Evento 'Prestamo.Creado' publicado para libro: " + tituloLibro);
                     } else {
-                        context.getLogger().warning("No se encontraron las credenciales de Event Grid en las variables de entorno.");
+                        context.getLogger().warning(
+                            "Variables EVENT_GRID_ENDPOINT / EVENT_GRID_KEY no configuradas. " +
+                            "El evento 'Prestamo.Creado' NO fue publicado.");
                     }
                 } catch (Exception ex) {
-                    context.getLogger().warning("Error al publicar evento en Event Grid: " + ex.getMessage());
+                    //Si el préstamo ya se insertó, el error de Event Grid no debe abortar la respuesta
+                    context.getLogger().warning(
+                        "Error al publicar evento 'Prestamo.Creado': " + ex.getMessage());
                 }
-                
-                //Respuesta de éxito
+
                 return request.createResponseBuilder(HttpStatus.CREATED)
                         .header("Content-Type", "application/json")
-                        .body("{\"message\":\"Created\"}").build();
+                        .body("{\"message\":\"Prestamo creado. Evento 'Prestamo.Creado' publicado en Event Grid.\"}").build();
             }
         } catch (Exception e) {
             Map<String, String> err = new HashMap<>();
