@@ -185,7 +185,7 @@ public class UsuariosFunction {
             }
             int idUsuario = Integer.parseInt(idParam);
 
-            // Publicar evento "Usuario.Eliminado" en Azure
+            //Publicar evento "Usuario.Eliminado" en Azure
             String eventGridEndpoint = System.getenv("EVENT_GRID_ENDPOINT");
             String eventGridKey = System.getenv("EVENT_GRID_KEY");
 
@@ -203,7 +203,7 @@ public class UsuariosFunction {
                     .credential(new AzureKeyCredential(eventGridKey))
                     .buildEventGridEventPublisherClient();
 
-            // El consumidor usará idUsuario para la cascada
+            //El consumidor usará idUsuario para la cascada
             UsuarioEventData eventData = new UsuarioEventData(idUsuario);
 
             EventGridEvent event = new EventGridEvent(
@@ -216,7 +216,7 @@ public class UsuariosFunction {
             context.getLogger().log(Level.INFO,
                     "Evento ''Usuario.Eliminado'' publicado para id_usuario: {0}", idUsuario);
 
-            // Eliminación real ocurrirá de forma asíncrona
+            //Eliminación real ocurrirá de forma asíncrona
             return request.createResponseBuilder(HttpStatus.ACCEPTED)
                     .header(HEADER_CONTENT_TYPE, MIME_JSON)
                     .body("{\"message\":\"Solicitud de eliminación aceptada. "

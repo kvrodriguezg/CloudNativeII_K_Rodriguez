@@ -13,7 +13,7 @@
         <java.version>17</java.version>
         <azure.functions.maven.plugin.version>1.33.0</azure.functions.maven.plugin.version>
         <azure.functions.java.library.version>3.0.0</azure.functions.java.library.version>
-        <functionAppName>AppCloudNativeII</functionAppName>
+        <functionAppName>AppCloudNativeDos</functionAppName>
     </properties>
 
     <dependencyManagement>
@@ -91,9 +91,9 @@
                 <version>${azure.functions.maven.plugin.version}</version>
                 <configuration>
                     <appName>${functionAppName}</appName>
-                    <resourceGroup>Grupo_Recursos_Cloud_Native_II</resourceGroup>
-                    <appServicePlanName>ASP-GrupoRecursosCloudNativeII-a9d7</appServicePlanName>
-                    <appRegion>eastus2</appRegion>
+                    <resourceGroup>DEV-CLOUD-NATIVE1_001_GRUPO08</resourceGroup>
+                    <appServicePlanName>ASP-GrupoRecursosCloudNativeDos</appServicePlanName>
+                    <region>eastus2</region>
                     <runtime>
                         <os>windows</os>
                         <javaVersion>17</javaVersion>

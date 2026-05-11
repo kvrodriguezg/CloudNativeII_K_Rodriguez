@@ -16,7 +16,7 @@ public class BffController {
 
     private final RestTemplate restTemplate;
 
-    @Value("${azure.functions.baseUrl:https://appcloudnativeii-e6bxa8fqcvgreveu.eastus2-01.azurewebsites.net}")
+    @Value("${azure.functions.baseUrl:https://appcloudnativedos-dsefd4avancbf7hr.eastus2-01.azurewebsites.net}")
     private String azureFunctionsBaseUrl;
 
     public BffController(RestTemplate restTemplate) {

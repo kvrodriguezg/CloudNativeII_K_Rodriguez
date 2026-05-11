@@ -38,29 +38,29 @@ public class UsuariosGraphQLFunction {
 
     private static final Logger LOGGER = Logger.getLogger(UsuariosGraphQLFunction.class.getName());
 
-    private static final String DB_URL      = System.getenv("ORACLE_DB_URL");
-    private static final String DB_USER     = System.getenv("ORACLE_DB_USER");
+    private static final String DB_URL = System.getenv("ORACLE_DB_URL");
+    private static final String DB_USER = System.getenv("ORACLE_DB_USER");
     private static final String DB_PASSWORD = System.getenv("ORACLE_DB_PASSWORD");
     private static final Gson gson = new Gson();
 
     // GraphQL / map key constants
     private static final String FIELD_ID_USUARIO = "id_usuario";
-    private static final String FIELD_NOMBRE     = "nombre";
-    private static final String FIELD_EMAIL      = "email";
+    private static final String FIELD_NOMBRE = "nombre";
+    private static final String FIELD_EMAIL = "email";
     private static final String FIELD_ID_PRESTAMO = "id_prestamo";
-    private static final String FIELD_LIBRO      = "libro";
-    private static final String FIELD_FECHA      = "fecha_prestamo";
-    private static final String FIELD_PRESTAMOS  = "prestamos";
-    private static final String FIELD_ERROR      = "error";
+    private static final String FIELD_LIBRO = "libro";
+    private static final String FIELD_FECHA = "fecha_prestamo";
+    private static final String FIELD_PRESTAMOS = "prestamos";
+    private static final String FIELD_ERROR = "error";
     private static final String GRAPHQL_VARIABLES = "variables";
 
     // DB column constants
-    private static final String COL_ID_USUARIO  = "ID_USUARIO";
+    private static final String COL_ID_USUARIO = "ID_USUARIO";
     private static final String COL_ID_PRESTAMO = "ID_PRESTAMO";
 
     // HTTP header/value constants
     private static final String HEADER_CONTENT_TYPE = "Content-Type";
-    private static final String MIME_JSON           = "application/json";
+    private static final String MIME_JSON = "application/json";
 
     private static GraphQL buildGraphQL() {
         String schema = "type Query {"
@@ -88,7 +88,7 @@ public class UsuariosGraphQLFunction {
         //Crear objeto TypeDefinitionRegistry
         TypeDefinitionRegistry typeDefinitionRegistry = schemaParser.parse(schema);
 
-        //Crear objeto RuntimeWiring, cuando alguien pida usuario(s) ejecutar la función que le corresponde
+        //Crear objeto RuntimeWiring
         RuntimeWiring runtimeWiring = RuntimeWiring.newRuntimeWiring()
                 .type("Query", builder -> builder
                         .dataFetcher("usuario", getUsuarioDataFetcher())
@@ -97,22 +97,23 @@ public class UsuariosGraphQLFunction {
 
         SchemaGenerator schemaGenerator = new SchemaGenerator();
 
-        //Crear objeto GraphQL — se une el esquema y el wiring
+        // Crear objeto GraphQL — se une el esquema y el wiring
         GraphQLSchema graphQLSchema = schemaGenerator.makeExecutableSchema(typeDefinitionRegistry, runtimeWiring);
 
         return GraphQL.newGraphQL(graphQLSchema).build();
     }
 
-    //Función datafetcher que obtiene un usuario por id
+    // Función datafetcher que obtiene un usuario por id
     private static DataFetcher<Map<String, Object>> getUsuarioDataFetcher() {
         return dataFetchingEnvironment -> {
             Integer id = dataFetchingEnvironment.getArgument(FIELD_ID_USUARIO);
-            if (id == null) return null;
+            if (id == null)
+                return null;
 
-            //Conexión a la base de datos
+            // Conexión a la base de datos
             try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
-                 PreparedStatement stmt = conn.prepareStatement(
-                         "SELECT ID_USUARIO, nombre, email FROM usuarios WHERE ID_USUARIO = ?")) {
+                    PreparedStatement stmt = conn.prepareStatement(
+                            "SELECT ID_USUARIO, nombre, email FROM usuarios WHERE ID_USUARIO = ?")) {
                 stmt.setInt(1, id);
                 try (ResultSet rs = stmt.executeQuery()) {
                     if (rs.next()) {
@@ -122,7 +123,7 @@ public class UsuariosGraphQLFunction {
                         usuario.put(FIELD_NOMBRE, rs.getString(FIELD_NOMBRE));
                         usuario.put(FIELD_EMAIL, rs.getString(FIELD_EMAIL));
 
-                        //Obtener los préstamos del usuario
+                        // Obtener los préstamos del usuario
                         List<Map<String, Object>> prestamosUser = new ArrayList<>();
                         try (PreparedStatement stmtP = conn.prepareStatement(
                                 "SELECT ID_PRESTAMO, libro, fecha_prestamo FROM prestamos WHERE ID_USUARIO = ?")) {
@@ -152,9 +153,9 @@ public class UsuariosGraphQLFunction {
         return dataFetchingEnvironment -> {
             List<Map<String, Object>> usuarios = new ArrayList<>();
             try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
-                 PreparedStatement stmtUser = conn.prepareStatement(
-                         "SELECT ID_USUARIO, nombre, email FROM usuarios");
-                 ResultSet rsUser = stmtUser.executeQuery()) {
+                    PreparedStatement stmtUser = conn.prepareStatement(
+                            "SELECT ID_USUARIO, nombre, email FROM usuarios");
+                    ResultSet rsUser = stmtUser.executeQuery()) {
 
                 while (rsUser.next()) {
                     Map<String, Object> usuario = new HashMap<>();
@@ -163,7 +164,7 @@ public class UsuariosGraphQLFunction {
                     usuario.put(FIELD_NOMBRE, rsUser.getString(FIELD_NOMBRE));
                     usuario.put(FIELD_EMAIL, rsUser.getString(FIELD_EMAIL));
 
-                    //Por cada usuario buscar sus préstamos
+                    // Por cada usuario buscar sus préstamos
                     List<Map<String, Object>> prestamosUser = new ArrayList<>();
                     try (PreparedStatement stmtP = conn.prepareStatement(
                             "SELECT ID_PRESTAMO, libro, fecha_prestamo FROM prestamos WHERE ID_USUARIO = ?")) {
@@ -191,15 +192,15 @@ public class UsuariosGraphQLFunction {
     private static final GraphQL graphQL = buildGraphQL();
 
     @FunctionName("UsuariosGraphQLFunction")
-    //Punto de entrada
+    // Punto de entrada
     public HttpResponseMessage run(
-            //Responde al post
-            @HttpTrigger(name = "req", methods = {HttpMethod.POST}, authLevel = AuthorizationLevel.ANONYMOUS)
-            HttpRequestMessage<Optional<String>> request,
+            // Responde al post
+            @HttpTrigger(name = "req", methods = {
+                    HttpMethod.POST }, authLevel = AuthorizationLevel.ANONYMOUS) HttpRequestMessage<Optional<String>> request,
             final ExecutionContext context) {
 
         try {
-            //Toma el request y extrae el query
+            // Toma el request y extrae el query
             String body = request.getBody().orElse("");
             JsonObject jsonObject = gson.fromJson(body, JsonObject.class);
             String query = jsonObject.get("query").getAsString();
@@ -207,7 +208,8 @@ public class UsuariosGraphQLFunction {
             Map<String, Object> variables = new HashMap<>();
             if (jsonObject.has(GRAPHQL_VARIABLES) && !jsonObject.get(GRAPHQL_VARIABLES).isJsonNull()) {
                 variables = gson.fromJson(jsonObject.get(GRAPHQL_VARIABLES),
-                        new TypeToken<Map<String, Object>>(){}.getType());
+                        new TypeToken<Map<String, Object>>() {
+                        }.getType());
             }
 
             ExecutionInput executionInput = ExecutionInput.newExecutionInput()
@@ -215,7 +217,7 @@ public class UsuariosGraphQLFunction {
                     .variables(variables)
                     .build();
 
-            //Ejecuta el query
+            // Ejecuta el query
             ExecutionResult executionResult = graphQL.execute(executionInput);
 
             return request.createResponseBuilder(HttpStatus.OK)
@@ -224,7 +226,7 @@ public class UsuariosGraphQLFunction {
                     .build();
 
         } catch (Exception e) {
-            //En caso de error
+            // En caso de error
             LOGGER.log(Level.SEVERE, "Error en UsuariosGraphQLFunction", e);
             Map<String, String> err = new HashMap<>();
             err.put(FIELD_ERROR, e.getMessage() != null ? e.getMessage() : e.toString());

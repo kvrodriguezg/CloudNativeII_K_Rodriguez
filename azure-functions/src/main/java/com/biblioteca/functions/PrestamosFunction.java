@@ -36,8 +36,8 @@ public class PrestamosFunction {
 
     @FunctionName("PrestamosFunction")
     public HttpResponseMessage run(
-            @HttpTrigger(name = "req", methods = {HttpMethod.GET, HttpMethod.POST, HttpMethod.PUT, HttpMethod.DELETE}, authLevel = AuthorizationLevel.ANONYMOUS)
-            HttpRequestMessage<Optional<String>> request,
+            @HttpTrigger(name = "req", methods = { HttpMethod.GET, HttpMethod.POST, HttpMethod.PUT,
+                    HttpMethod.DELETE }, authLevel = AuthorizationLevel.ANONYMOUS) HttpRequestMessage<Optional<String>> request,
             final ExecutionContext context) {
 
         if (request.getHttpMethod() == HttpMethod.GET) {
@@ -55,23 +55,25 @@ public class PrestamosFunction {
     private HttpResponseMessage getPrestamos(HttpRequestMessage<?> request) {
         String idParam = request.getQueryParameters().get("id_prestamo");
         List<Map<String, Object>> prestamos = new ArrayList<>();
-        
+
         try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD)) {
             PreparedStatement stmt;
             if (idParam != null && !idParam.isEmpty()) {
-                stmt = conn.prepareStatement("SELECT ID_PRESTAMO, ID_USUARIO, libro, fecha_prestamo FROM prestamos WHERE ID_PRESTAMO = ?");
+                stmt = conn.prepareStatement(
+                        "SELECT ID_PRESTAMO, ID_USUARIO, libro, fecha_prestamo FROM prestamos WHERE ID_PRESTAMO = ?");
                 stmt.setInt(1, Integer.parseInt(idParam));
             } else {
                 stmt = conn.prepareStatement("SELECT ID_PRESTAMO, ID_USUARIO, libro, fecha_prestamo FROM prestamos");
             }
-            
+
             try (ResultSet rs = stmt.executeQuery()) {
                 while (rs.next()) {
                     Map<String, Object> prestamo = new HashMap<>();
                     prestamo.put("id_prestamo", rs.getInt("ID_PRESTAMO"));
                     prestamo.put("id_usuario", rs.getInt("ID_USUARIO"));
                     prestamo.put("libro", rs.getString("libro"));
-                    prestamo.put("fecha_prestamo", rs.getDate("fecha_prestamo") != null ? rs.getDate("fecha_prestamo").toString() : null);
+                    prestamo.put("fecha_prestamo",
+                            rs.getDate("fecha_prestamo") != null ? rs.getDate("fecha_prestamo").toString() : null);
                     prestamos.add(prestamo);
                 }
             }
@@ -85,7 +87,9 @@ public class PrestamosFunction {
 
             return request.createResponseBuilder(HttpStatus.OK)
                     .header("Content-Type", "application/json")
-                    .body(idParam != null && !idParam.isEmpty() && !prestamos.isEmpty() ? gson.toJson(prestamos.get(0)) : gson.toJson(prestamos)).build();
+                    .body(idParam != null && !idParam.isEmpty() && !prestamos.isEmpty() ? gson.toJson(prestamos.get(0))
+                            : gson.toJson(prestamos))
+                    .build();
         } catch (Exception e) {
             Map<String, String> err = new HashMap<>();
             err.put("error", e.getMessage() != null ? e.getMessage() : e.toString());
@@ -100,57 +104,61 @@ public class PrestamosFunction {
             String body = request.getBody().orElse("");
             JsonObject jsonObject = gson.fromJson(body, JsonObject.class);
             int idUsuario = jsonObject.get("id_usuario").getAsInt();
-            // El campo "libro" del body contiene el TÍTULO del libro, que es la FK hacia la tabla libros
+
             String tituloLibro = jsonObject.get("libro").getAsString();
 
             try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
-                 PreparedStatement stmt = conn.prepareStatement(
-                         "INSERT INTO prestamos (ID_USUARIO, libro, fecha_prestamo) VALUES (?, ?, SYSDATE)")) {
+                    PreparedStatement stmt = conn.prepareStatement(
+                            "INSERT INTO prestamos (ID_USUARIO, libro, fecha_prestamo) VALUES (?, ?, ?)")) {
+
+                // Obtener la fecha actual en la zona horaria de Chile
+                java.time.ZonedDateTime zdt = java.time.ZonedDateTime.now(java.time.ZoneId.of("America/Santiago"));
+                java.sql.Date localDate = java.sql.Date.valueOf(zdt.toLocalDate());
+
                 stmt.setInt(1, idUsuario);
                 stmt.setString(2, tituloLibro);
+                stmt.setDate(3, localDate);
                 stmt.executeUpdate();
 
-                //Evento "Prestamo.Creado"
+                // Evento "Prestamo.Creado"
                 try {
                     String eventGridEndpoint = System.getenv("EVENT_GRID_ENDPOINT");
-                    String eventGridKey      = System.getenv("EVENT_GRID_KEY");
+                    String eventGridKey = System.getenv("EVENT_GRID_KEY");
 
                     if (eventGridEndpoint != null && !eventGridEndpoint.isEmpty()
                             && eventGridKey != null && !eventGridKey.isEmpty()) {
 
-                        EventGridPublisherClient<EventGridEvent> client =
-                            new EventGridPublisherClientBuilder()
+                        EventGridPublisherClient<EventGridEvent> client = new EventGridPublisherClientBuilder()
                                 .endpoint(eventGridEndpoint)
                                 .credential(new AzureKeyCredential(eventGridKey))
                                 .buildEventGridEventPublisherClient();
 
-                        // Payload tipado: tituloLibro permite al consumidor hacer el UPDATE por título
                         PrestamoEventData eventData = new PrestamoEventData(tituloLibro, idUsuario);
 
                         EventGridEvent event = new EventGridEvent(
-                            "/biblioteca/prestamos",          // subject
-                            "Prestamo.Creado",                // eventType
-                            BinaryData.fromObject(eventData), // data
-                            "1.0"                             // dataVersion
+                                "/biblioteca/prestamos", // subject
+                                "Prestamo.Creado", // eventType
+                                BinaryData.fromObject(eventData), // data
+                                "1.0" // dataVersion
                         );
 
                         client.sendEvent(event);
                         context.getLogger().info(
-                            "Evento 'Prestamo.Creado' publicado para libro: " + tituloLibro);
+                                "Evento 'Prestamo.Creado' publicado para libro: " + tituloLibro);
                     } else {
                         context.getLogger().warning(
-                            "Variables EVENT_GRID_ENDPOINT / EVENT_GRID_KEY no configuradas. " +
-                            "El evento 'Prestamo.Creado' NO fue publicado.");
+                                "Variables EVENT_GRID_ENDPOINT / EVENT_GRID_KEY no configuradas. " +
+                                        "El evento 'Prestamo.Creado' NO fue publicado.");
                     }
                 } catch (Exception ex) {
-                    //Si el préstamo ya se insertó, el error de Event Grid no debe abortar la respuesta
                     context.getLogger().warning(
-                        "Error al publicar evento 'Prestamo.Creado': " + ex.getMessage());
+                            "Error al publicar evento 'Prestamo.Creado': " + ex.getMessage());
                 }
 
                 return request.createResponseBuilder(HttpStatus.CREATED)
                         .header("Content-Type", "application/json")
-                        .body("{\"message\":\"Prestamo creado. Evento 'Prestamo.Creado' publicado en Event Grid.\"}").build();
+                        .body("{\"message\":\"Prestamo creado. Evento 'Prestamo.Creado' publicado en Event Grid.\"}")
+                        .build();
             }
         } catch (Exception e) {
             Map<String, String> err = new HashMap<>();
@@ -165,7 +173,7 @@ public class PrestamosFunction {
         try {
             String body = request.getBody().orElse("");
             JsonObject jsonObject = gson.fromJson(body, JsonObject.class);
-            
+
             String idParam = request.getQueryParameters().get("id_prestamo");
             int idPrestamo;
             if (idParam != null && !idParam.isEmpty()) {
@@ -173,17 +181,18 @@ public class PrestamosFunction {
             } else {
                 idPrestamo = jsonObject.get("id_prestamo").getAsInt();
             }
-            
+
             int idUsuario = jsonObject.get("id_usuario").getAsInt();
             String libro = jsonObject.get("libro").getAsString();
 
             try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
-                 PreparedStatement stmt = conn.prepareStatement("UPDATE prestamos SET ID_USUARIO = ?, libro = ? WHERE ID_PRESTAMO = ?")) {
+                    PreparedStatement stmt = conn
+                            .prepareStatement("UPDATE prestamos SET ID_USUARIO = ?, libro = ? WHERE ID_PRESTAMO = ?")) {
                 stmt.setInt(1, idUsuario);
                 stmt.setString(2, libro);
                 stmt.setInt(3, idPrestamo);
                 int rows = stmt.executeUpdate();
-                
+
                 if (rows > 0) {
                     return request.createResponseBuilder(HttpStatus.OK)
                             .header("Content-Type", "application/json")
@@ -214,10 +223,10 @@ public class PrestamosFunction {
             int idPrestamo = Integer.parseInt(idParam);
 
             try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
-                 PreparedStatement stmt = conn.prepareStatement("DELETE FROM prestamos WHERE ID_PRESTAMO = ?")) {
+                    PreparedStatement stmt = conn.prepareStatement("DELETE FROM prestamos WHERE ID_PRESTAMO = ?")) {
                 stmt.setInt(1, idPrestamo);
                 int rows = stmt.executeUpdate();
-                
+
                 if (rows > 0) {
                     return request.createResponseBuilder(HttpStatus.OK)
                             .header("Content-Type", "application/json")
